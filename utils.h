@@ -19,6 +19,13 @@
 #include <signal.h>     // Signal handling system calls (sigaction(2))
 
 
+ #include <pthread.h>
+
+ pthread_mutex_t mutex; /* a mutex to protect updating the statuscounts */
+
+ int NumOfConnected;
+
+
 size_t
 strlcat(char *dst, const char *src, size_t siz);
 

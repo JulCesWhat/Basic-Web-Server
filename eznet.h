@@ -23,6 +23,7 @@ struct client_info {
     int fd;                     // Socket file descriptor
     char ip[INET_ADDRSTRLEN+1]; // Socket name (IP address in text form)
     int port;                   // Socket name (port number)
+    const char *bindRoot;		// A simple way to solve the root problem for multathreading
 }; 
 
 // Create a TCP/IPv4 socket and bind it to the endpoint described

@@ -26,9 +26,9 @@
                                                     "</html> "
 
 
+ extern pthread_mutex_t mutex; /* a mutex to protect updating the statuscounts */
 
-
-
+ extern int NumOfConnected;
 /*
  * Appends src to string dst of size siz (unlike strncat, siz is the
  * full size of dst, not space left).  At most siz-1 characters
@@ -96,14 +96,6 @@ strlcpy(char *dst, const char *src, size_t siz)
     return(s - src - 1);    /* count does not include NUL */
 }
 
-
-
-
-
-
-
-
-
 /*send_file_found HELPER FUNCTION
  *  RECEIVES: <content_type> and <content_type_size> to write from <path> array
  *  FUNCTION: Looks at the file extension in <path> and writes an specific content type
@@ -121,8 +113,6 @@ void get_content_type(char* content_type, int content_type_size ,char* path){
     
     if (ext != NULL)
     {
-                                
-            
             if (   (strcmp(ext, ".html")  == 0 )   ||   ( strcmp(ext, ".htm")  == 0 )   )
                             strlcpy(content_type, "text/html", content_type_size);
             else if  (  strcmp(ext, ".gif")  == 0  )
@@ -131,9 +121,10 @@ void get_content_type(char* content_type, int content_type_size ,char* path){
                             strlcpy(content_type, "image/jpeg", content_type_size);
             else if  (  strcmp(ext, ".txt")  == 0  )
                             strlcpy(content_type, "text/plain", content_type_size);
-            else 
-                            strlcpy(content_type, "application/octet-stream", content_type_size);
-            
+            else if  (  strcmp(ext, ".css")  == 0  )
+            				strlcpy(content_type, "text/css", content_type_size);
+            else
+                            strlcpy(content_type, "application/octet-stream", content_type_size);   
     }else 
     {
         strlcpy(content_type, "application/octet-stream", content_type_size);
@@ -141,7 +132,6 @@ void get_content_type(char* content_type, int content_type_size ,char* path){
     
     return;
 }
-
 
 /*  send_response HELPER FUNCTION
  *  RECEIVES: file descriptor <sock>, an opennedd file descriptor <infile>, and the <path> of the file to serve
@@ -157,12 +147,10 @@ void send_file_found(FILE* sock, FILE* infile, char* path){
         get_content_type(content_type, sizeof(content_type), path ); /* gets the type of  file content */
         
         snprintf(buf, sizeof(buf), "HTTP/1.0 200 OK\nContent-type: %s \n\n", content_type ); /*  snprintf = safe string print to buffer */
+
         fputs(buf, sock); /*  write to file descriptor (socket in client)  */
-        
+        //printf("%s\n", buf);      
         memset(buf, '\0', sizeof(buf) ); /* refill "buf" with null values */
-
-
-
 
         fseek( infile , 0L , SEEK_END);
         bytesRead = ftell( infile );
@@ -178,13 +166,12 @@ void send_file_found(FILE* sock, FILE* infile, char* path){
         }
 
         fputs(content, sock);
+        //printf("%s\n", content);
 
         free(content);        
 
         return;
 }
-
-
 
 /*  RECEIVES: file descriptor <sock> and the client's request: <command>, <path>, and <http_version>
  *  FUNCTION: Finds the file in <path> and prints it in the screen of client.
@@ -208,6 +195,10 @@ void send_response(FILE* sock, char*  command, char* path, char* http_version, c
         snprintf(buf, sizeof(buf), BAD_REQUEST);
         fputs(buf, sock); /*  write to file descriptor (socket in client)  */
 
+        pthread_mutex_lock( &mutex );
+    	NumOfConnected--;
+    	pthread_mutex_unlock( &mutex );
+
         return;
     }
   
@@ -221,8 +212,9 @@ void send_response(FILE* sock, char*  command, char* path, char* http_version, c
 
     infile = fopen(full_path,"r");
     if (infile != NULL){ /*  openned file successfully  */
-        send_file_found(sock, infile, path);
 
+        send_file_found(sock, infile, path);
+        
         fclose(infile);
         
     } else { /*  error openning file. maybe file was not found  */
@@ -236,10 +228,12 @@ void send_response(FILE* sock, char*  command, char* path, char* http_version, c
         fputs(buf, sock); /*  write to file descriptor (socket in client)  */
 
     }
+    	pthread_mutex_lock( &mutex );
+    	NumOfConnected--;
+    	pthread_mutex_unlock( &mutex );
+
     return;
 }
-
-
 
 // Generic log-to-stdout logging routine
 // Message format: "timestamp:pid:user-defined-message"

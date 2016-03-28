@@ -14,17 +14,23 @@
 
 #include "utils.h"
 
+ #include <pthread.h>
+
+ extern pthread_mutex_t mutex; /* a mutex to protect updating the statuscounts */
+
+ extern int NumOfConnected;
+
 // GLOBAL: settings structure instance
 struct settings {
     const char *bindhost;   // Hostname/IP address to bind/listen on
     const char *bindport;   // Portnumber (as a string) to bind/listen on
     const char *bindroot;
-    const int bindAllowed;
+    int bindAllowed;
 } g_settings = {
     .bindhost = "localhost",    // Default: listen only on localhost interface
     .bindport = "5000",         // Default: listen on TCP port 5000
     .bindroot = "",
-    .bindAllowed = 5;
+    .bindAllowed = 5,
 };
 
 // Parse commandline options and sets g_settings accordingly.
@@ -33,7 +39,7 @@ int parse_options(int argc, char * const argv[]) {
     int ret = -1; 
 
     char op;
-    while ((op = getopt(argc, argv, "h:p:r:")) > -1) {
+    while ((op = getopt(argc, argv, "h:p:r:w:")) > -1) {
         switch (op) {
             case 'h':
                 g_settings.bindhost = optarg;
@@ -69,7 +75,10 @@ void sigint_handler(int signum) {
 
 // Connection handling logic: reads/echos lines of text until error/EOF,
 // then tears down connection.
-void handle_client(struct client_info *client, const char* rootdir) {
+//void *handle_client(struct client_info *client) {
+void *handle_client(void *x_void_ptr) {
+
+    struct client_info *client = (struct client_info *) x_void_ptr;
     FILE *stream = NULL;
 
     // Wrap the socket file descriptor in a read/write FILE stream
@@ -82,7 +91,6 @@ void handle_client(struct client_info *client, const char* rootdir) {
         goto cleanup;
     }
     
-
     // Echo all lines
     char *line = NULL;
     size_t len = 0u;
@@ -102,8 +110,9 @@ void handle_client(struct client_info *client, const char* rootdir) {
                 while (getline(&line, &len, stream) > 0 && line[0] != '\r' && line[0] != '\n')
                         printf("%s", line);
                            /* throw it away */  
+        printf("%s here \n", client->bindRoot);
 
-        send_response(stream, command, path, http_version, rootdir);
+        send_response(stream, command, path, http_version, client->bindRoot);
 
         free(command);
         free(path);
@@ -114,7 +123,7 @@ void handle_client(struct client_info *client, const char* rootdir) {
             printf("Unexpected EOF. Unable to connect to client.\n");
             
             /* Handle request with no newline, which is an invalid request */
-            send_response(stream, "GET without newline", "path", "http_version", rootdir);
+            send_response(stream, "GET without newline", "path", "http_version", client->bindRoot);
         
         }
 
@@ -124,6 +133,7 @@ cleanup:
     destroy_client_info(client);
     free(line);
     printf("\tSession ended.\n");
+    return NULL;
 }
 
 //THE MAIN PROGRAM STARTS HERE
@@ -135,6 +145,8 @@ int main(int argc, char **argv) {
 
     // Network server/client context
     int server_sock = -1;
+
+    NumOfConnected = 1;
 
     // Handle our options
     if (parse_options(argc, argv)) {
@@ -159,6 +171,7 @@ int main(int argc, char **argv) {
     }
     blog("Bound and listening on %s:%s", g_settings.bindhost, g_settings.bindport);
 
+    pthread_mutex_init(&mutex, NULL);  /* initialize semaphore */       
     server_running = true;
     while (server_running) {
         struct client_info client;
@@ -170,8 +183,24 @@ int main(int argc, char **argv) {
             // it was  "real" error, report it, but keep serving.
             if (errno != EINTR) { perror("unable to accept connection"); }
         } else {
-            blog("connection from %s:%d", client.ip, client.port);
-            handle_client(&client, g_settings.bindroot); // Client gets cleaned up in here
+            if((g_settings.bindAllowed + 1) > NumOfConnected){
+                blog("connection from %s:%d", client.ip, client.port);
+                blog("%d current request bein handled", NumOfConnected);
+
+                //Starting threads....fun
+                client.bindRoot = g_settings.bindroot;
+                pthread_t thread;
+
+                NumOfConnected++;
+                if(pthread_create(&thread, NULL, handle_client, &client)){
+                    fprintf(stderr, "Error creating thread\n");
+                    return 1;
+                }
+
+                //handle_client(&client, g_settings.bindroot); // Client gets cleaned up in here
+            }else{
+                blog("Maximun number of request bein hadnled. Try again later.", client.ip, client.port);
+            }
         }
     }
     ret = 0;
