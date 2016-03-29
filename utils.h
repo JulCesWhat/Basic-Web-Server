@@ -36,6 +36,8 @@ void get_content_type(char* content_type, int content_type_size ,char* path);
 
 void send_file_found(FILE* sock, FILE* infile, char* path);
 
+void SendBadReq(FILE* sock);
+
 void send_response(FILE* sock, char*  command, char* path, char* http_version, const char* rootdir);
 
 void blog(const char *fmt, ...);

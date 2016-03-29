@@ -16,6 +16,7 @@
 
  #include <pthread.h>
 
+
  extern pthread_mutex_t mutex; /* a mutex to protect updating the statuscounts */
 
  extern int NumOfConnected;
@@ -98,7 +99,7 @@ void *handle_client(void *x_void_ptr) {
     if ((recd = getline(&line, &len, stream)) > 0) {
         printf("\tReceived %zd ??? %zd byte line; echoing...\n", recd, len);
 
-        printf("%s", line);
+        //printf("%s", line);
 
         char *command = (char*)malloc(recd*sizeof(char));
         char *path = (char*)malloc(recd*sizeof(char));
@@ -174,16 +175,19 @@ int main(int argc, char **argv) {
     pthread_mutex_init(&mutex, NULL);  /* initialize semaphore */       
     server_running = true;
     while (server_running) {
-        struct client_info client;
 
-        // Wait for a connection on that socket
-        if (wait_for_client(server_sock, &client)) {
-            // Check to make sure our "failure" wasn't due to
-            // a signal interrupting our accept(2) call; if
-            // it was  "real" error, report it, but keep serving.
-            if (errno != EINTR) { perror("unable to accept connection"); }
-        } else {
-            if((g_settings.bindAllowed + 1) > NumOfConnected){
+        if((g_settings.bindAllowed + 1) > NumOfConnected){
+
+            struct client_info client;
+
+            // Wait for a connection on that socket
+            if (wait_for_client(server_sock, &client)) {
+                // Check to make sure our "failure" wasn't due to
+                // a signal interrupting our accept(2) call; if
+                // it was  "real" error, report it, but keep serving.
+                if (errno != EINTR) { perror("unable to accept connection"); }
+            } else {
+            //if((g_settings.bindAllowed + 1) > NumOfConnected){
                 blog("connection from %s:%d", client.ip, client.port);
                 blog("%d current request bein handled", NumOfConnected);
 
@@ -198,9 +202,10 @@ int main(int argc, char **argv) {
                 }
 
                 //handle_client(&client, g_settings.bindroot); // Client gets cleaned up in here
-            }else{
-                blog("Maximun number of request bein hadnled. Try again later.", client.ip, client.port);
+            
             }
+        }else{
+                blog("Maximun number of request bein hadnled. Try again later.");
         }
     }
     ret = 0;

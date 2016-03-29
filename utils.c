@@ -173,6 +173,20 @@ void send_file_found(FILE* sock, FILE* infile, char* path){
         return;
 }
 
+//Just a litle method created to make the next method a little bit smaller
+void SendBadReq(FILE* sock){
+    char buf[MAX_PATH_SIZE] = {0};
+
+    snprintf(buf, sizeof(buf), "HTTP/1.0 200 OK\nContent-type: text/html \n\n"); /*  snprintf = safe string print to buffer */
+    fputs(buf, sock); /*  write to file descriptor (socket in client)  */
+        
+    memset(buf, '\0', sizeof(buf) ); /* refill "buf" with null values */
+    snprintf(buf, sizeof(buf), BAD_REQUEST);
+    fputs(buf, sock); /*  write to file descriptor (socket in client)  */
+
+}
+
+
 /*  RECEIVES: file descriptor <sock> and the client's request: <command>, <path>, and <http_version>
  *  FUNCTION: Finds the file in <path> and prints it in the screen of client.
  *                      If file not found, it prints a nice error message in the client.
@@ -183,33 +197,54 @@ void send_response(FILE* sock, char*  command, char* path, char* http_version, c
 {
     char full_path[MAX_PATH_SIZE] = {0}; /* "full_path" will contain the whole path from the root to serve the file */
     char buf[MAX_PATH_SIZE] = {0};
+    char resolvedPath[MAX_PATH_SIZE] = {0};
     FILE *infile;
         
     /* Invalid Request. Resques was not GET. Send bad request file */
     if (strcmp(command, "GET" ) != 0 )
     {
-        snprintf(buf, sizeof(buf), "HTTP/1.0 200 OK\nContent-type: text/html \n\n"); /*  snprintf = safe string print to buffer */
-        fputs(buf, sock); /*  write to file descriptor (socket in client)  */
-        
-        memset(buf, '\0', sizeof(buf) ); /* refill "buf" with null values */
-        snprintf(buf, sizeof(buf), BAD_REQUEST);
-        fputs(buf, sock); /*  write to file descriptor (socket in client)  */
-
-        pthread_mutex_lock( &mutex );
-    	NumOfConnected--;
-    	pthread_mutex_unlock( &mutex );
-
-        return;
+        SendBadReq(sock);
+        goto forend;
     }
-  
+
     /* Proces valid request */
-    strlcpy(full_path, rootdir, sizeof(full_path) ); /* get full path */
-    strlcat(full_path, path +1, sizeof(full_path) ); /* concatenate rootdir and path */
+    size_t a = strlcpy(full_path, rootdir, sizeof(full_path) ); /* get full path */
+   // printf("%zd\n", a);
+    if(a >= MAX_PATH_SIZE){
+    	SendBadReq(sock);
+    	goto forend;
+    }
+
+    if(full_path[0] == 0){
+
+    	if(!getcwd(full_path, MAX_PATH_SIZE)){
+    		printf("%s\n", "Root directory is to big.");
+    		SendBadReq(sock);
+    		goto forend;
+    	}
+    }
+
+    size_t b = strlcat(full_path, path, sizeof(full_path) ); /* concatenate rootdir and path */
+
+    if(b >= MAX_PATH_SIZE){
+    	SendBadReq(sock);
+    	goto forend;
+    }
+
+    const char* pathUnsoved = full_path;
+
+    if (realpath(pathUnsoved, resolvedPath) == NULL) {
+      fprintf(stderr, " No such path: %s\n", pathUnsoved);
+      SendBadReq(sock);
+      goto forend;
+    }
+/*
+    printf("%zd\n", b);
 
     printf("\n%s\n", rootdir);
     printf("\n%s\n", path);
     printf("\n%s\n", full_path);
-
+*/
     infile = fopen(full_path,"r");
     if (infile != NULL){ /*  openned file successfully  */
 
@@ -228,11 +263,12 @@ void send_response(FILE* sock, char*  command, char* path, char* http_version, c
         fputs(buf, sock); /*  write to file descriptor (socket in client)  */
 
     }
+
+    forend:
     	pthread_mutex_lock( &mutex );
     	NumOfConnected--;
     	pthread_mutex_unlock( &mutex );
-
-    return;
+    	return;
 }
 
 // Generic log-to-stdout logging routine
