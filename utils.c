@@ -26,6 +26,25 @@
                                                     "</html> "
 
 
+#define    FILE_NO_RIGHT        "<html>"\
+                                                    "<head> " "<title>File Forbidden</title> " \
+                                                    "</head> "\
+                                                     "<body> "\
+                                                        "<h1>HTTP/1.0 403 Forbidden.</h1> "\
+                                                        "<p>The file was not found in the path you entered. Go back and try again.</p> "\
+                                                      "</body> "\
+                                                    "</html> "
+
+
+ #define    FILE_NO_OPEN        "<html>"\
+                                                    "<head> " "<title>File Not Found</title> " \
+                                                    "</head> "\
+                                                     "<body> "\
+                                                        "<h1>HTTP/1.0 405? To many files being requested at the money.</h1> "\
+                                                        "<p>The file was not found at the current moment. Go back and try again.</p> "\
+                                                      "</body> "\
+                                                    "</html> "                                              
+
  extern pthread_mutex_t mutex; /* a mutex to protect updating the statuscounts */
 
  extern int NumOfConnected;
@@ -238,14 +257,8 @@ void send_response(FILE* sock, char*  command, char* path, char* http_version, c
       SendBadReq(sock);
       goto forend;
     }
-/*
-    printf("%zd\n", b);
 
-    printf("\n%s\n", rootdir);
-    printf("\n%s\n", path);
-    printf("\n%s\n", full_path);
-*/
-    infile = fopen(full_path,"r");
+    infile = fopen(full_path,"r+");
     if (infile != NULL){ /*  openned file successfully  */
 
         send_file_found(sock, infile, path);
@@ -253,15 +266,29 @@ void send_response(FILE* sock, char*  command, char* path, char* http_version, c
         fclose(infile);
         
     } else { /*  error openning file. maybe file was not found  */
+
+    	fprintf(stderr, "Unable to open '%s': %s\n", full_path, strerror(errno));
         
         memset(buf, '\0', sizeof(buf) ); /* refill "buf" with null values */
         snprintf(buf, sizeof(buf), "HTTP/1.0 200 OK\nContent-type: text/html \n\n"); /*  snprintf = safe string print to buffer */
         fputs(buf, sock); /*  write to file descriptor (socket in client)  */
         
-        memset(buf, '\0', sizeof(buf) ); /* refill "buf" with null values */
-        snprintf(buf, sizeof(buf), FILE_NOT_FOUND);
+        memset(buf, '\0', sizeof(buf) ); /* refill "buf" with null values */										 // EISDIR		Is a directory (POSIX.1)
+        																											 // EACCES		Permission denied (POSIX.1)
+    																											     // EIO         Input/output error (POSIX.1)
+																													 // ENOENT      No such file or directory (POSIX.1)
+																												     // EMFILE      Too many open files (POSIX.1)
+		if(EACCES){
+        	// Prints a 403 as a joke
+        	snprintf(buf, sizeof(buf), FILE_NO_RIGHT);
+        }else if(ENOENT){
+        	// Prints a 404 webpage
+        	snprintf(buf, sizeof(buf), FILE_NOT_FOUND);
+        }else if(EMFILE){
+        	// Prints a page with tomany openfiles
+       	    snprintf(buf, sizeof(buf), FILE_NO_OPEN);
+        }
         fputs(buf, sock); /*  write to file descriptor (socket in client)  */
-
     }
 
     forend:

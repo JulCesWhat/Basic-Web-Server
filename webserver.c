@@ -70,9 +70,12 @@ volatile bool server_running = false;
 
 // SIGINT handler that detects Ctrl-C and sets the "stop serving" flag
 void sigint_handler(int signum) {
+    
     blog("Ctrl-C (SIGINT) detected; shutting down...");
     server_running = false;
 }
+
+
 
 // Connection handling logic: reads/echos lines of text until error/EOF,
 // then tears down connection.
@@ -109,9 +112,7 @@ void *handle_client(void *x_void_ptr) {
         sscanf( line, "%s %s %s", command, path, http_version);
 
                 while (getline(&line, &len, stream) > 0 && line[0] != '\r' && line[0] != '\n')
-                        printf("%s", line);
-                           /* throw it away */  
-        printf("%s here \n", client->bindRoot);
+                           /* throw it away */  ;
 
         send_response(stream, command, path, http_version, client->bindRoot);
 
